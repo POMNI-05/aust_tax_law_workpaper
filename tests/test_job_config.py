@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from tax_calculators.validation import CalculatorError
-from v1.job_config import get_policy_year
+from backend.job_config import get_policy_year
 
 
 class JobConfigTests(unittest.TestCase):

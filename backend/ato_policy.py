@@ -1,4 +1,4 @@
-# v1/ato_policy.py
+# backend/ato_policy.py
 """
 Year-specific ATO policy layer.
 
@@ -33,7 +33,7 @@ def _number(section: dict[str, Any], key: str) -> float | None:
 
 
 def _policy_from_source(income_year: str) -> dict[str, Any]:
-    """Adapt the validated rule registry to the legacy v1 policy interface."""
+    """Adapt the validated rule registry to the workpaper policy interface."""
 
     source = get_year_source(income_year)
     company = source["company_tax"]

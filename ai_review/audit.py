@@ -101,7 +101,7 @@ def build_ai_review_audit_record(
         "review_contract": {
             "response_schema_name": AI_REVIEW_RESPONSE_SCHEMA["name"],
             "response_schema_version": AI_REVIEW_RESPONSE_SCHEMA_VERSION,
-            "prompt_version": SHADOW_REVIEW_PROMPT_VERSION,
+            "prompt_version": response.get("prompt_version", SHADOW_REVIEW_PROMPT_VERSION),
         },
         "input_sha256": shadow_review_input_sha256(
             workpaper_result,

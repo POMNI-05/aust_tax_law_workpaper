@@ -1,4 +1,4 @@
-# v1/itr_rules_2026.py
+# backend/itr_rules_2026.py
 """ATO-aware account-name matching and ITR labelling logic for 2026.
 
 This module uses the 2025 itr_rules.py as a structural base and applies
@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import Iterable
 
 try:
-    # Package import when running as v1 package.
+    # Package import when running as a package.
     from .itr_rules import (
         LabelRule,
         R,

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`v1/workpaper_builder.py`, the versioned `tax_calculators/` package and the
+`backend/workpaper_builder.py`, the versioned `tax_calculators/` package and the
 writer create the review workbook and deterministic reconciliation.
 
 ## Inputs and outputs

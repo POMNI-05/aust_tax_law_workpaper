@@ -64,13 +64,13 @@ def run() -> int:
 
         try:
             from .cleaner import load_clean_report_bundle
-            from .config import OUTPUT_PATH
+            from .config import DATA_DIR, OUTPUT_PATH
             from .utils import ensure_dirs, setup_logging
             from .workpaper_builder import build_workpaper
             from .write_workbook import write_workbook
         except ImportError:  # Direct-script compatibility.
             from cleaner import load_clean_report_bundle
-            from config import OUTPUT_PATH
+            from config import DATA_DIR, OUTPUT_PATH
             from utils import ensure_dirs, setup_logging
             from workpaper_builder import build_workpaper
             from write_workbook import write_workbook
@@ -79,7 +79,7 @@ def run() -> int:
         ensure_dirs()
 
         logger.info("Xero/tax workpaper pipeline starting")
-        logger.info("Using uploaded/local Excel inputs from v1/data/")
+        logger.info("Using uploaded/local Excel inputs from %s", DATA_DIR)
         logger.info("Output target: %s", OUTPUT_PATH)
 
         reports = load_clean_report_bundle()
@@ -98,7 +98,7 @@ def run() -> int:
                     decision_traces=workpaper.decision_traces,
                     metadata={
                         "contract_version": "1.0",
-                        "backend": "v1.main",
+                        "backend": "backend.main",
                     },
                 )
             )
@@ -118,7 +118,7 @@ def run() -> int:
                     error_message=str(exc),
                     metadata={
                         "contract_version": "1.0",
-                        "backend": "v1.main",
+                        "backend": "backend.main",
                     },
                 )
             )

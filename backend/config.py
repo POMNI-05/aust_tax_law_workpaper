@@ -1,4 +1,4 @@
-# v1/config.py
+# backend/config.py
 """
 Central configuration for the uploaded-file workpaper pipeline.
 

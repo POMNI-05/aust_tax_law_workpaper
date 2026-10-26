@@ -82,7 +82,7 @@ def run_scan_job(
     env["TAX_SCAN_SOURCE_HASHES"] = json.dumps(source_hashes)
 
     completed = subprocess.run(
-        [sys.executable, "-m", "v1.scan_workbooks"],
+        [sys.executable, "-m", "backend.scan_workbooks"],
         cwd=str(ROOT_DIR),
         text=True,
         capture_output=True,

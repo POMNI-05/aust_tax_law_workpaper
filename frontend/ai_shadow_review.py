@@ -5,8 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ai_review import GeminiShadowReviewProvider, GrokShadowReviewProvider
-from ai_review.http_transport import UrllibJsonTransport
+from ai_review import (
+    GeminiShadowReviewProvider,
+    GrokShadowReviewProvider,
+    OllamaShadowReviewProvider,
+    SHADOW_REVIEW_PROMPT_VERSION,
+)
+from ai_review.http_transport import LocalJsonTransport, UrllibJsonTransport
+from ai_review.local_provider import LOCAL_PROVIDER_NAME, LOCAL_REVIEW_PROMPT_VERSION
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +27,10 @@ def run_ai_shadow_review(
 ) -> dict[str, Any]:
     """Run minimised decision evidence through the selected AI adapter."""
 
+    prompt_version = (
+        LOCAL_REVIEW_PROMPT_VERSION if ai_provider == LOCAL_PROVIDER_NAME
+        else SHADOW_REVIEW_PROMPT_VERSION
+    )
     provider_kwargs = {
         "api_key": api_key,
         "model": model,
@@ -30,6 +40,8 @@ def run_ai_shadow_review(
         provider = GeminiShadowReviewProvider(**provider_kwargs)
     elif ai_provider == "Grok":
         provider = GrokShadowReviewProvider(**provider_kwargs)
+    elif ai_provider == LOCAL_PROVIDER_NAME:
+        provider = OllamaShadowReviewProvider(model=model, transport=LocalJsonTransport())
     else:
         return {
             "status": "skipped",
@@ -43,6 +55,7 @@ def run_ai_shadow_review(
         logger.exception("AI shadow review failed for provider=%s", ai_provider)
         return {
             "status": "error",
+            "prompt_version": prompt_version,
             "summary": f"{ai_provider} shadow review failed: {type(exc).__name__}: {exc}",
             "findings": [],
         }
@@ -59,6 +72,7 @@ def run_ai_shadow_review(
     ]
     return {
         "status": "success",
+        "prompt_version": prompt_version,
         "summary": (
             f"{ai_provider} returned {len(findings)} display-only, schema-validated "
             "review finding(s)."

@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from v1.itr_metadata import ITEM_7_LABELS
-from v1.ato_policy import get_policy_for_year
-from v1.labeller import _get_matcher, _net_profit_mapping
+from backend.itr_metadata import ITEM_7_LABELS
+from backend.ato_policy import get_policy_for_year
+from backend.labeller import _get_matcher, _net_profit_mapping
 
 
 class PolicyYearTests(unittest.TestCase):
@@ -21,9 +21,9 @@ class PolicyYearTests(unittest.TestCase):
                 return _get_matcher()
 
     def test_all_ui_policy_years_have_a_matcher(self):
-        self.assertEqual(self._matcher_for("2024").__module__, "v1.itr_rules_2024")
-        self.assertEqual(self._matcher_for("2025").__module__, "v1.itr_rules")
-        self.assertEqual(self._matcher_for("2026").__module__, "v1.itr_rules_2026")
+        self.assertEqual(self._matcher_for("2024").__module__, "backend.itr_rules_2024")
+        self.assertEqual(self._matcher_for("2025").__module__, "backend.itr_rules")
+        self.assertEqual(self._matcher_for("2026").__module__, "backend.itr_rules_2026")
 
     def test_2024_does_not_use_2025_build_to_rent_label(self):
         result = self._matcher_for("2024")(

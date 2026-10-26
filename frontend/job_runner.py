@@ -1,6 +1,6 @@
 # frontend/job_runner.py
 """
-Bridge between Streamlit UI and v1 backend.
+Bridge between the Streamlit UI and the workpaper backend.
 
 Stable design:
 - Give every request its own UUID-scoped inputs, output, logs and config.
@@ -66,13 +66,13 @@ except ImportError:  # Streamlit imports this module from frontend/ directly.
 
 FRONTEND_DIR = Path(__file__).resolve().parent
 ROOT_DIR = FRONTEND_DIR.parent
-V1_DIR = ROOT_DIR / "v1"
+BACKEND_DIR = ROOT_DIR / "backend"
 
 UPLOADS_DIR = FRONTEND_DIR / "uploads"
 DOWNLOADS_DIR = FRONTEND_DIR / "downloads"
 JOBS_DIR = FRONTEND_DIR / "jobs"
 
-V1_MAIN_PATH = V1_DIR / "main.py"
+BACKEND_MAIN_PATH = BACKEND_DIR / "main.py"
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -219,13 +219,13 @@ def _detect_reports_from_log(stdout: str, stderr: str) -> dict[str, bool]:
 
 # ── Backend subprocess ────────────────────────────────────────────────────────
 
-def _run_v1_main(
+def _run_backend_main(
     *,
     request_path: Path,
     result_path: Path,
 ) -> subprocess.CompletedProcess:
-    if not V1_MAIN_PATH.exists():
-        raise FileNotFoundError(f"Cannot find backend main.py at: {V1_MAIN_PATH}")
+    if not BACKEND_MAIN_PATH.exists():
+        raise FileNotFoundError(f"Cannot find backend main.py at: {BACKEND_MAIN_PATH}")
 
     env = os.environ.copy()
 
@@ -233,7 +233,7 @@ def _run_v1_main(
     env["TAX_WORKPAPER_RESULT_PATH"] = str(result_path)
 
     return subprocess.run(
-        [sys.executable, "-m", "v1.main"],
+        [sys.executable, "-m", "backend.main"],
         cwd=str(ROOT_DIR),
         text=True,
         capture_output=True,
@@ -292,7 +292,7 @@ def run_workpaper_job(
     retain_job_files: bool = False,
 ) -> dict[str, Any]:
     """
-    Run the working v1 backend from Streamlit uploads.
+    Run the workpaper backend from Streamlit uploads.
 
     Recommended app.py call:
         run_workpaper_job(
@@ -422,10 +422,10 @@ def run_workpaper_job(
         result["workpaper_request_path"] = str(request_path)
 
         # 4. Run the backend package with this job's isolated paths.
-        result["backend_command"] = f"{sys.executable} -m v1.main"
+        result["backend_command"] = f"{sys.executable} -m backend.main"
 
         try:
-            completed = _run_v1_main(
+            completed = _run_backend_main(
                 request_path=request_path,
                 result_path=result_path,
             )
@@ -467,7 +467,7 @@ def run_workpaper_job(
                 stderr,
             )
 
-        # v1 writes its typed failure result before returning a non-zero exit
+        # The backend writes its typed failure result before returning a non-zero exit
         # code. Read it first so the UI can render an intentional safety stop
         # (such as CELL-002) rather than a generic subprocess failure.
         result["workpaper_result_path"] = str(result_path)

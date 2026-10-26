@@ -9,14 +9,14 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 
-from v1.cleaner import ReportInput
-from v1.workpaper_builder import (
+from backend.cleaner import ReportInput
+from backend.workpaper_builder import (
     _build_carry_forward_losses_input,
     _build_div7a_review_schedule,
     _build_rd_tax_incentive_review_schedule,
     _manual_adjustment_rows,
 )
-from v1.write_workbook import write_workbook
+from backend.write_workbook import write_workbook
 
 
 def _source_report(path: Path, title: str, periods: list[str], rows: list[tuple]) -> ReportInput:
@@ -72,7 +72,7 @@ class OutputPresentationTests(unittest.TestCase):
                 bs_input = _source_report(root / "bs.xlsx", "BS", list(periods), [("Cash", *([100.0] * len(periods)))])
                 reports = SimpleNamespace(pl_input=pl_input, bs_input=bs_input, tax_depreciation_report=None, tax_depreciation_total=None, tax_depreciation_source=None)
                 output = root / "output.xlsx"
-                with patch("v1.write_workbook.OUTPUT_PATH", output):
+                with patch("backend.write_workbook.OUTPUT_PATH", output):
                     write_workbook(reports, _workpaper(list(periods)))
 
                 workbook = load_workbook(output, data_only=False)
@@ -94,7 +94,7 @@ class OutputPresentationTests(unittest.TestCase):
             dep_input = _source_report(root / "dep.xlsx", "Depreciation", periods, [("Total tax depreciation", 25.0)])
             reports = SimpleNamespace(pl_input=pl_input, bs_input=bs_input, tax_depreciation_report=dep_input, tax_depreciation_total=25.0, tax_depreciation_source="dep.xlsx / Depreciation")
             output = root / "output.xlsx"
-            with patch("v1.write_workbook.OUTPUT_PATH", output):
+            with patch("backend.write_workbook.OUTPUT_PATH", output):
                 write_workbook(reports, _workpaper(periods))
 
             workbook = load_workbook(output, data_only=False)
@@ -119,7 +119,7 @@ class OutputPresentationTests(unittest.TestCase):
             workpaper = _workpaper(periods)
             workpaper.labelled_pl.loc[0, "Review Note"] = "A long reviewer explanation."
             output = root / "output.xlsx"
-            with patch("v1.write_workbook.OUTPUT_PATH", output):
+            with patch("backend.write_workbook.OUTPUT_PATH", output):
                 write_workbook(reports, workpaper)
 
             sheet = load_workbook(output, data_only=False)["Profit and Loss"]
@@ -144,7 +144,7 @@ class OutputPresentationTests(unittest.TestCase):
                 tax_depreciation_source=None,
             )
             output = root / "output.xlsx"
-            with patch("v1.write_workbook.OUTPUT_PATH", output):
+            with patch("backend.write_workbook.OUTPUT_PATH", output):
                 write_workbook(reports, _workpaper(periods))
 
             sheet = load_workbook(output, data_only=False)["Balance Sheet"]
@@ -157,7 +157,7 @@ class OutputPresentationTests(unittest.TestCase):
     def test_scalar_adjustment_and_loss_inputs_do_not_invent_period_values(self):
         periods = ["2026", "2025", "2024"]
         adjustment = {"description": "Reviewed adjustment", "amount": 125.0, "source": "Reviewer"}
-        with patch.dict("v1.workpaper_builder.TAX_ADJUSTMENTS", {"add_back_7W": [adjustment]}, clear=True):
+        with patch.dict("backend.workpaper_builder.TAX_ADJUSTMENTS", {"add_back_7W": [adjustment]}, clear=True):
             add_rows, _, _, _ = _manual_adjustment_rows(periods)
 
         self.assertEqual(add_rows[0]["2026"], 125.0)

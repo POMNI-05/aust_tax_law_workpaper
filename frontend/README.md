@@ -14,3 +14,9 @@ The frontend accepts one combined Excel workbook or multiple workbooks, records 
 AI is optional. Do not paste an API key unless the selected provider will be used for that run. Keys are passed directly to the face-check helper and are not written to job configuration or metadata.
 
 AI 为可选功能。只有本次任务确实需要使用相应服务商时才输入 API key。API key 会直接传给 face-check，不会写入任务配置或元数据。
+
+For the optional local review trial, run `python tools/run_local_ai.py` in a
+separate terminal, then select **Run local AI review** after scanning. No API
+key is needed. Press Ctrl+C in the server terminal when finished. See
+[`docs/local_ai_review.md`](../docs/local_ai_review.md) for setup and resource
+limits on a shared Mac.

@@ -82,17 +82,29 @@ unchanged.
 
 ## Stage 19 — Repository structure triage and focused cleanup
 
-- [ ] Map the current frontend/backend/workpaper modules and identify files
+- **Active task plan:** [Backend package restructure — 27 October 2026](backend_restructure_todo_20261027.md).
+
+- [x] Map the current frontend/backend/workpaper modules and identify files
   whose size or mixed responsibilities now make maintenance risky.
-- [ ] Use existing sample data, retained job artifacts or real project scripts
+- [x] Use existing sample data, retained job artifacts or real project scripts
   to reproduce concrete issues; do not add broad new test scaffolding.
-- [ ] Apply only focused fixes or reorganisation that preserve deterministic
+- [x] Apply only focused fixes or reorganisation that preserve deterministic
   tax outcomes and the original-workbook immutability boundary.
-- [ ] Update the owning workflow/debugging log and validate with existing
+- [x] Update the owning workflow/debugging log and validate with existing
   workflows.
 - **Exit criterion:** remaining issues are either fixed or explicitly
   documented with evidence, and any cleanup reduces coupling without changing
   tax treatment.
+- **Completed cleanup, 27 October 2026:** renamed the live `v1/` backend to
+  `backend/` and updated callers and workflow references. All 114 existing tests
+  pass; FY2024–2026 synthetic scan evidence, decision contracts and workbook
+  contents match before/after. All 95 retained non-code file hashes match.
+- **Deferred decomposition:** `frontend/app.py` (2,336 lines),
+  `backend/cleaner.py` (1,280), `backend/itr_rules.py` (2,021),
+  `backend/workpaper_builder.py` (1,756) and `backend/write_workbook.py` (1,207)
+  remain large. Splitting UI flow, parsing, rules and rendering needs its own
+  behavior-preservation plan; this package migration does not alter those
+  responsibilities.
 
 ## Stage 20 — Generator information architecture and ATO status capture
 

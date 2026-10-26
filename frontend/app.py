@@ -8,12 +8,12 @@ Run from project root:
 Design:
 - One upload box only -> user can upload one combined workbook or multiple Excel files.
 - Frontend does not decide which file is P&L or Balance Sheet.
-- job_runner copies files into v1/data/.
-- v1/main.py runs exactly like the working backend test.
-- User/custom ITR overrides are stored in v1/user_itr_overrides.json.
+- scan_runner and job_runner copy uploads into isolated job directories.
+- Scan and generation run backend.scan_workbooks and backend.main subprocesses.
+- User/custom ITR overrides are stored in backend/user_itr_overrides.json.
 - Previous generated workpapers can be reviewed/downloaded from frontend/downloads/.
 - Each generated workpaper gets a sidecar metadata JSON file containing user inputs.
-- Optional Gemini/Grok review uses only minimised decision evidence.
+- Optional local/Gemini/Grok review uses only minimised decision evidence.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ import streamlit as st
 # ── Path setup ────────────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).resolve().parent
 ROOT_DIR = FRONTEND_DIR.parent
-V1_DIR = ROOT_DIR / "v1"
+BACKEND_DIR = ROOT_DIR / "backend"
 DOWNLOADS_DIR = FRONTEND_DIR / "downloads"
 
 if str(ROOT_DIR) not in sys.path:
@@ -57,6 +57,7 @@ from ai_review import (
     read_ai_review_audit,
     update_accountant_disposition,
 )
+from ai_review.local_provider import DEFAULT_LOCAL_MODEL, LOCAL_PROVIDER_NAME
 from override_editor import (
     append_override,
     build_override_from_form,
@@ -194,9 +195,10 @@ OPTIONAL_TABLES = {
     "psi": "Personal services income review table",
 }
 
-AI_PROVIDER_OPTIONS = ["None", "Gemini", "Grok"]
+AI_PROVIDER_OPTIONS = ["None", LOCAL_PROVIDER_NAME, "Gemini", "Grok"]
 
 AI_MODEL_OPTIONS = {
+    LOCAL_PROVIDER_NAME: [DEFAULT_LOCAL_MODEL],
     "Gemini": [
         "gemini-2.5-flash",
         "gemini-2.5-pro",
@@ -499,18 +501,18 @@ def _read_itr_rule_context(policy_year: str) -> str:
 
     year = str(policy_year or "2026").strip()
 
-    base_rules = V1_DIR / "itr_rules.py"
-    year_rules = V1_DIR / f"itr_rules_{year}.py"
+    base_rules = BACKEND_DIR / "itr_rules.py"
+    year_rules = BACKEND_DIR / f"itr_rules_{year}.py"
 
     parts = [
-        "===== v1/itr_rules.py =====",
+        "===== backend/itr_rules.py =====",
         _safe_read_text(base_rules),
     ]
 
     if year != "2025":
         parts.extend(
             [
-                f"===== v1/itr_rules_{year}.py =====",
+                f"===== backend/itr_rules_{year}.py =====",
                 _safe_read_text(year_rules),
             ]
         )
@@ -708,7 +710,7 @@ def _fallback_revision_explanation(question: str) -> str:
         "For manual review, check:\n"
         "- the **Review note** column in the workpaper\n"
         "- the **ITR Ref** side labels\n"
-        "- `v1/itr_rules.py` / `v1/itr_rules_2026.py`"
+        "- `backend/itr_rules.py` / `backend/itr_rules_2026.py`"
     )
 
 
@@ -2150,6 +2152,20 @@ with left:
             requested_tables = generation_payload.get("requested_tables") or {}
             st.caption(f"Reports: {len(scan_result.get('detected_reports', []))}")
             st.caption(f"Included review areas: {', '.join(OPTIONAL_TABLES[k] for k, v in requested_tables.items() if v) or 'None'}")
+            local_ai_review = st.checkbox(
+                "Run local AI review (experimental, read-only)",
+                value=False,
+                key="stage2_local_ai_review",
+                help=(
+                    "Reviews decision evidence on this Mac using a small local model. "
+                    "No API key is needed. Findings never change the workbook or tax outcome."
+                ),
+            )
+            if local_ai_review:
+                st.caption(
+                    f"Model: {DEFAULT_LOCAL_MODEL}. One review at a time; the model is "
+                    "unloaded after each request. Other accounts share this Mac's resources."
+                )
             if blocking_items:
                 for item in blocking_items:
                     st.error(item)
@@ -2167,7 +2183,9 @@ with left:
                             ato_policy_year=generation_payload["ato_policy_year"],
                             requested_tables=generation_payload["requested_tables"],
                             reviewer_notes=generation_payload["reviewer_notes"],
-                            run_ai_face_check=False,
+                            run_ai_face_check=local_ai_review,
+                            ai_provider=LOCAL_PROVIDER_NAME if local_ai_review else "None",
+                            ai_model=DEFAULT_LOCAL_MODEL if local_ai_review else "",
                             company_tax_rate_category=generation_payload["tax_rate_choice"],
                             base_rate_entity_assessment=generation_payload["base_rate_entity_assessment"],
                             reviewed_tax_losses=generation_payload["reviewed_tax_losses"],
@@ -2191,9 +2209,9 @@ with left:
                     document_description=generation_payload["document_description"],
                     ato_policy_year=generation_payload["ato_policy_year"],
                     uploaded_files=[],
-                    ai_provider="None",
-                    ai_model="",
-                    run_ai_face_check=False,
+                    ai_provider=LOCAL_PROVIDER_NAME if local_ai_review else "None",
+                    ai_model=DEFAULT_LOCAL_MODEL if local_ai_review else "",
+                    run_ai_face_check=local_ai_review,
                     company_tax_rate_category=generation_payload["tax_rate_choice"],
                     base_rate_entity_assessment=generation_payload["base_rate_entity_assessment"],
                     requested_tables=generation_payload["requested_tables"],
@@ -2222,6 +2240,12 @@ with left:
                         mime=T.DOWNLOAD_MIME,
                         use_container_width=True,
                     )
+                ai_review = result.get("ai_face_check") or {}
+                if ai_review.get("status") == "error":
+                    st.warning(ai_review.get("summary", "Local AI review was unavailable."))
+                elif ai_review.get("status") == "success":
+                    st.info(ai_review.get("summary", "AI review completed."))
+                _render_ai_review_audit(output_path)
             else:
                 st.error(result.get("error_message") or "Generation failed.")
             if st.button("Start another staged workpaper", use_container_width=True):

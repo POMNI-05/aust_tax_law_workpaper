@@ -11,6 +11,7 @@ from .models import (
     WorkpaperStatus,
 )
 from .provider import AIReviewProvider
+from .local_provider import OllamaShadowReviewProvider
 from .audit import (
     ACCOUNTANT_DISPOSITION_STATUSES,
     AI_REVIEW_AUDIT_SCHEMA_VERSION,
@@ -53,6 +54,7 @@ __all__ = [
     "DecisionTrace",
     "GeminiShadowReviewProvider",
     "GrokShadowReviewProvider",
+    "OllamaShadowReviewProvider",
     "ReviewItem",
     "ReviewSeverity",
     "ShadowReviewInput",

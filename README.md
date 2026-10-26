@@ -128,6 +128,24 @@ are held in reviewed source files. See
 [`tax_calculators/README.md`](tax_calculators/README.md) for interfaces and
 limitations.
 
+### Repository layout
+
+```text
+backend/          Excel intake, deterministic rules and workbook generation
+frontend/         Streamlit upload, scan, review and editing workflow
+tax_calculators/  Reviewed arithmetic and year-specific source constants
+ai_review/        Request/result contracts and read-only AI review adapters
+tests/            Safety, calculator, UI and end-to-end checks
+tools/            Local maintenance scripts
+docs/             Workflow map, project memory and staged task checklists
+```
+
+The active backend is `backend/` (previously `v1/`). Generation runs as
+`python -m backend.main`; scanning runs as `python -m backend.scan_workbooks`
+with scan-job configuration supplied by the frontend. See
+[`backend/README.md`](backend/README.md) for module responsibilities and local
+configuration. The Streamlit launch command remains the same.
+
 ### Automated checks
 
 Run the complete test suite from the project root:
@@ -148,6 +166,11 @@ write a local `*.ai_review_audit.json` sidecar containing provider, model, input
 hash, response status, findings and accountant disposition. Read
 [`docs/ai_review_data_handling.md`](docs/ai_review_data_handling.md) before
 enabling it for client work. Never commit API keys or client workbooks.
+
+An experimental local Ollama reviewer is also available from the staged
+generator, with no API key. It uses a small model on demand and unloads it after
+each request. See [`docs/local_ai_review.md`](docs/local_ai_review.md) for
+startup, shared-Mac resource limits and the read-only review boundary.
 
 ### Official references
 
@@ -248,6 +271,18 @@ python tools/tag_workpapers_by_client.py --write-index client_index.json
 
 根目录的 `tax_calculators/` 将受规则约束的算术与 AI 审核、工作簿生成分开。它包含公司税、税务调节、折旧、Division 7A 和税务亏损等基础计算器；各年度 ATO 常量保存在经过审核的来源文件中。接口和限制请参阅 [`tax_calculators/README.md`](tax_calculators/README.md)。
 
+### 项目结构
+
+后端现位于 `backend/`（原 `v1/`），负责 Excel 读取、确定性分类和工作簿生成。
+`frontend/` 负责 Streamlit 上传、扫描、审核和编辑；`tax_calculators/` 保存经过审核的
+计算器和年度常量；`ai_review/` 保存请求/结果契约及只读 AI 审核适配器。
+测试、维护脚本和项目文档分别位于 `tests/`、`tools/` 和 `docs/`。
+
+生成入口为 `python -m backend.main`，扫描入口为
+`python -m backend.scan_workbooks`，扫描任务配置由前端传入。
+Streamlit 启动命令不变。模块职责和本地配置参阅
+[`backend/README.md`](backend/README.md)。
+
 ### 自动化测试
 
 在项目根目录运行完整测试：
@@ -261,6 +296,10 @@ python -m unittest discover -s tests -v
 ### 可选 AI 审核
 
 AI 默认关闭。可选的 Gemini/Grok 适配器只接收最小化的确定性决定证据，不能修改税务结果。每次运行可能在本地生成 `*.ai_review_audit.json` sidecar，记录服务商、模型、输入哈希、响应状态、发现和会计师处置。为客户项目启用前，请阅读 [`docs/ai_review_data_handling.md`](docs/ai_review_data_handling.md)。不要提交 API key 或客户工作簿。
+
+分阶段生成页面也提供实验性的本地 Ollama 审核，无需 API key。小模型按需运行，每次请求后卸载；
+不会修改工作簿或税务结果。启动方法及多账户共用 Mac 的资源限制见
+[`docs/local_ai_review.md`](docs/local_ai_review.md)。
 
 ### 官方参考
 

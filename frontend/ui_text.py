@@ -21,8 +21,7 @@ UPLOAD_FILE_TYPES = ["xlsx", "xls", "xlsm"]
 UPLOAD_FILES_LABEL = "Upload Excel workbook(s)"
 UPLOAD_FILES_HELP = (
     "Upload one combined workbook, or upload multiple Excel files. "
-    "The backend will copy these into v1/data and automatically detect "
-    "Profit & Loss and Balance Sheet sheets."
+    "Profit & Loss and Balance Sheet sheets are detected automatically."
 )
 
 UPLOAD_SELECTED_PREFIX = "file(s) selected"

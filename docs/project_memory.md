@@ -212,6 +212,54 @@ a stage as complete if its exit criterion or validation has not been met.
   45 workpapers, 10 named groups and 8 intentionally unassigned generic files.
   Full suite: 105 tests passed.
 
+### Backend package restructure — 27 October 2026
+
+- The active engine now lives in `backend/`, replacing the historical `v1/`
+  package. Frontend scan/generation launchers, imports, mock targets, override
+  readers and current workflow references use the new package name.
+- Both override readers share `backend/user_itr_overrides.json`. The complete
+  directory was moved, including local data/output/log files; all 95 retained
+  non-code files match their original hashes.
+- All 114 existing tests passed under Python 3.13.13. Synthetic FY2024–2026
+  scans, source hashes, full decision/result contracts and workbook contents
+  match the baseline, excluding only the renamed backend metadata and workbook
+  creation/modification timestamps. No live AI call was made.
+- Sixteen backend modules retain identical executable syntax. The other two
+  change entry-point metadata/input-location logging and a missing-module
+  diagnostic; tax rules and calculations are unchanged.
+- Package ownership and commands are documented in
+  [`backend/README.md`](../backend/README.md). The completed task plan is
+  [`backend_restructure_todo_20261027.md`](TODO/backend_restructure_todo_20261027.md).
+  The Streamlit launch command is unchanged. Any personal CLI scripts must use
+  `backend.main` or `backend.scan_workbooks` instead of the old package name.
+
+### Local AI review trial — 27 October 2026
+
+- Added optional `Local (Ollama)` review using `qwen3:1.7b`. The staged
+  generator has an off-by-default checkbox and displays the existing
+  review/audit/disposition surface after generation. Cloud adapters remain
+  available internally; no cloud fallback occurs during local review.
+- Requests are fixed to numeric loopback, bypass proxies, reject redirects,
+  use strict schema/decision-ID validation and partition evidence into bounded
+  batches. The model has no tools or workbook-write authority. Local prompts
+  are audited as `1.0-local.1`.
+- The helper starts one foreground, lower-priority server with cloud disabled,
+  one loaded model and one concurrent request. Requests use two CPU threads,
+  an 8K context, bounded output and immediate unloading. These settings are
+  not hard CPU/GPU/memory quotas across macOS accounts.
+- This shared Mac reports Apple M5/16 GB. Installed portable Ollama 0.40.11 and
+  the model under ignored `.local_ai/`, plus Ollama's standard per-account
+  identity files under `~/.ollama/`. No system-wide install/login service.
+- All 124 tests pass, including 10 new local review/transport/UI/isolation
+  cases. Live synthetic review: six decisions, two generic reminders,
+  10.7-second inference, 11.6 seconds overall, sampled model allocation about
+  1.78 GiB. The workbook hash was unchanged. Model unloading and server shutdown
+  were verified; the temporary server is stopped.
+- This validates the integration, not tax-review quality or another account's
+  user experience. Setup and limits are in
+  [`local_ai_review.md`](local_ai_review.md); the completed plan is
+  [`local_ai_review_todo_20261027.md`](TODO/local_ai_review_todo_20261027.md).
+
 ## Current roadmap
 
 The authoritative staged checklist is

@@ -56,6 +56,13 @@ exports a new revision without overwriting the original workbook.
 
 ## Ownership boundary
 
+The active engine package is [`backend/`](../backend/README.md), renamed from
+`v1/` on 27 October 2026. The frontend launches `backend.scan_workbooks` for
+scan-only evidence and `backend.main` for deterministic generation. Calculators
+and optional AI adapters remain separate packages. The completed migration plan
+and validation are in
+[`backend_restructure_todo_20261027.md`](TODO/backend_restructure_todo_20261027.md).
+
 Only deterministic rules and accountant-approved actions can affect a tax
 outcome. AI review, UI history, metadata, and audit records are downstream
 read-only support functions.

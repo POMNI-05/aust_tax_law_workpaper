@@ -1,4 +1,4 @@
-# v1/job_config.py
+# backend/job_config.py
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 Frontend helper for reading/writing backend user ITR overrides.
 
 This file lets Streamlit:
-- read v1/user_itr_overrides.json
+- read backend/user_itr_overrides.json
 - append a new user-approved override
 - validate basic override shape before saving
 
@@ -25,9 +25,9 @@ from typing import Any
 
 FRONTEND_DIR = Path(__file__).resolve().parent
 ROOT_DIR = FRONTEND_DIR.parent
-V1_DIR = ROOT_DIR / "v1"
+BACKEND_DIR = ROOT_DIR / "backend"
 
-OVERRIDE_FILE = V1_DIR / "user_itr_overrides.json"
+OVERRIDE_FILE = BACKEND_DIR / "user_itr_overrides.json"
 _OVERRIDE_LOCK = threading.RLock()
 
 

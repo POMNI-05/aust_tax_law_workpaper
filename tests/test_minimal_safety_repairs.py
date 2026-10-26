@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 from openpyxl import Workbook
 
-from v1.cleaner import (
+from backend.cleaner import (
     AmountParseStatus,
     ReportInput,
     add_row_type,
@@ -16,22 +16,22 @@ from v1.cleaner import (
     extract_tax_depreciation_total,
     parse_amount,
 )
-from v1.workpaper_builder import (
+from backend.workpaper_builder import (
     _build_bs_checks,
     _build_label_summary,
     _extract_net_profit_by_period,
 )
-from v1.labeller import (
+from backend.labeller import (
     _apply_balance_sheet_section_conflict_review,
     _should_label_row,
 )
-from v1.write_workbook import _find_main_amount_col, _looks_like_generated_column
+from backend.write_workbook import _find_main_amount_col, _looks_like_generated_column
 
 
 class MinimalSafetyRepairTests(unittest.TestCase):
     def test_requested_year_is_selected_instead_of_numeric_density(self):
         df = pd.DataFrame({"Account": ["Sales"], "2024": [10], "2025": [5]})
-        with patch("v1.cleaner.SELECTED_INCOME_YEAR", "2025"):
+        with patch("backend.cleaner.SELECTED_INCOME_YEAR", "2025"):
             self.assertEqual(choose_current_amount_col(df, ["2024", "2025"]), "2025")
 
     def test_sales_and_other_income_with_amounts_are_accounts(self):
@@ -323,7 +323,7 @@ class MinimalSafetyRepairTests(unittest.TestCase):
         ws.append(["Account", "2025", "2024"])
         ws.append(["Sales", 100.0, 90.0])
 
-        with patch("v1.write_workbook.SELECTED_INCOME_YEAR", "2025"):
+        with patch("backend.write_workbook.SELECTED_INCOME_YEAR", "2025"):
             self.assertEqual(_find_main_amount_col(ws, 1, 4, 3), 2)
 
 

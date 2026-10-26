@@ -1,4 +1,4 @@
-# v1/workpaper_builder.py
+# backend/workpaper_builder.py
 """Build accountant-style workpaper data blocks."""
 
 from __future__ import annotations

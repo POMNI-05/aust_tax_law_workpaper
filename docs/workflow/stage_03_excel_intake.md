@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`v1/cleaner.py` detects report structure, identifies amount columns and turns
+`backend/cleaner.py` detects report structure, identifies amount columns and turns
 raw source cells into cleaned report data without hiding uncertainty.
 
 ## Inputs and outputs

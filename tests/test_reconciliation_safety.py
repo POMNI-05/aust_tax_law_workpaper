@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from v1.workpaper_builder import (
+from backend.workpaper_builder import (
     _auto_reconciliation_rows_from_labelled_pl,
     _build_proposed_adjustments,
     _build_tax_reconciliation,
@@ -282,8 +282,8 @@ class ReconciliationSafetyTests(unittest.TestCase):
         reconciliation = _build_tax_reconciliation(clean_pl, pd.DataFrame())
 
         with (
-            patch("v1.workpaper_builder.TAX_RATE", 0.30),
-            patch("v1.workpaper_builder.COMPANY_TAX_RATE_CATEGORY", "general"),
+            patch("backend.workpaper_builder.TAX_RATE", 0.30),
+            patch("backend.workpaper_builder.COMPANY_TAX_RATE_CATEGORY", "general"),
         ):
             reconciliation = _build_tax_reconciliation(clean_pl, pd.DataFrame())
 

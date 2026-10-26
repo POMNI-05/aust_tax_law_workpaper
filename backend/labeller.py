@@ -1,4 +1,4 @@
-# v1/labeller.py
+# backend/labeller.py
 """Label accounting rows with direct ITR codes.
 
 Design:
@@ -73,8 +73,8 @@ def _get_matcher():
     """Return the year-specific ITR labelling function.
 
     File naming rule:
-    - 2025 uses legacy v1/itr_rules.py
-    - 2026+ can use v1/itr_rules_<year>.py, e.g. itr_rules_2026.py
+    - 2025 uses backend/itr_rules.py.
+    - Other supported years use backend/itr_rules_<year>.py.
     """
     year = str(get_policy_year("2026")).strip()
 
@@ -90,7 +90,7 @@ def _get_matcher():
     except ModuleNotFoundError as exc:
         raise ValueError(
             f"No ITR rules module found for policy year {year}. "
-            f"Expected backend file: v1/{module_name}.py"
+            f"Expected backend module: {module_name}"
         ) from exc
 
     if not hasattr(rules_module, "match_financial_label"):

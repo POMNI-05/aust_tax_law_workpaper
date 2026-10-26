@@ -44,8 +44,8 @@ class JobRunnerTests(unittest.TestCase):
                 patch.object(job_runner, "JOBS_DIR", jobs_dir),
                 patch.object(
                     job_runner,
-                    "_run_v1_main",
-                    side_effect=subprocess.TimeoutExpired("v1.main", 30),
+                    "_run_backend_main",
+                    side_effect=subprocess.TimeoutExpired("backend.main", 30),
                 ),
             ):
                 result = job_runner.run_workpaper_job(extra_files=[upload])
@@ -74,7 +74,7 @@ class JobRunnerTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             with (
                 patch.object(job_runner, "JOBS_DIR", Path(folder) / "jobs"),
-                patch.object(job_runner, "_run_v1_main", side_effect=failed_backend),
+                patch.object(job_runner, "_run_backend_main", side_effect=failed_backend),
             ):
                 result = job_runner.run_workpaper_job(extra_files=[upload])
 

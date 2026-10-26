@@ -2,11 +2,12 @@
 .env
 interesting_spots.md
 .ruff_cache/
+.local_ai/
 
 # Raw downloaded data and outputs (financial data — never commit)
-v1/data/
-v1/output/
-v1/logs/
+backend/data/
+backend/output/
+backend/logs/
 v2_api/data/
 v2_api/output/
 v2_api/logs/

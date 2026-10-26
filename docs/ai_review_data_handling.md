@@ -2,7 +2,7 @@
 
 ## Purpose and boundary
 
-Gemini and Grok are optional, **display-only** reviewers. They may identify a
+Local Ollama, Gemini and Grok are optional, **display-only** reviewers. They may identify a
 missing fact or describe a point for accountant review. They do not determine a
 tax treatment, modify an ITR label, create an adjustment, change the workbook,
 or select a tax rate.
@@ -13,7 +13,7 @@ the workbook unchanged.
 
 ## Data sent to a provider
 
-When the user explicitly selects an AI provider and supplies an API key, the
+When the user explicitly selects local review, or a cloud provider with an API key, the
 application sends only the structured `DecisionTrace` and deterministic
 `ReviewItem` evidence required for the shadow review. This can include account
 names, ITR references, matched rule evidence, and review actions.
@@ -29,8 +29,14 @@ machine-readable `DecisionTrace` evidence rather than asking a model to infer
 an outcome from application source code.
 
 Account names and factual evidence can still be confidential client data.
-Treat this as an external disclosure: obtain the firm/client approval required
+For cloud providers, treat this as an external disclosure: obtain the firm/client approval required
 by your engagement terms and professional obligations before enabling it.
+
+Local review uses a fixed loopback endpoint with proxies and redirects disabled,
+no tools, no cloud fallback and no API key. Runtime/model downloads use the
+internet separately from review. The local server is accessible on the same
+Mac, including from other accounts; it is not an account isolation boundary.
+See [local review setup and resource limits](local_ai_review.md).
 
 ## Retention and audit trail
 

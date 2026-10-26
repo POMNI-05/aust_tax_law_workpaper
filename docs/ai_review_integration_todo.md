@@ -64,6 +64,13 @@ all decisions and any approved override.
   ignorable. **Met:** `*.ai_review_audit.json` stores only display-only review
   evidence and an accountant disposition; it is never read by the tax engine.
 
+## Local review extension — 27 October 2026
+
+The active trial plan is
+[`local_ai_review_todo_20261027.md`](TODO/local_ai_review_todo_20261027.md).
+It adds an optional localhost-only model at the same read-only boundary and
+does not change the completed cloud-review stages or deterministic tax logic.
+
 ## `AiReview` minimum response shape
 
 ```json

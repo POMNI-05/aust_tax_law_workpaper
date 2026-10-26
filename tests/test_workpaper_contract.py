@@ -95,7 +95,7 @@ class WorkpaperContractTests(unittest.TestCase):
                 output_path="/job/output/workpaper.xlsx",
                 review_items=(review_item,),
                 decision_traces=(trace,),
-                metadata={"backend": "v1.main"},
+                metadata={"backend": "backend.main"},
             )
 
             write_workpaper_result(result, result_path)
@@ -127,7 +127,7 @@ class WorkpaperContractTests(unittest.TestCase):
                 status=WorkpaperStatus.COMPLETED,
                 output_path="/job/output/workpaper.xlsx",
                 decision_traces=(trace,),
-                metadata={"backend": "v1.main"},
+                metadata={"backend": "backend.main"},
             )
 
             write_workpaper_result(result, result_path)

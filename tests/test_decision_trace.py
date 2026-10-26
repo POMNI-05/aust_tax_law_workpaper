@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pandas as pd
 
 from ai_review import ReviewSeverity
-from v1.decision_trace import build_decision_traces, review_items_from_traces
-from v1.labeller import label_report
+from backend.decision_trace import build_decision_traces, review_items_from_traces
+from backend.labeller import label_report
 
 
 class DecisionTraceTests(unittest.TestCase):
@@ -21,8 +21,8 @@ class DecisionTraceTests(unittest.TestCase):
             }
         )
         with (
-            patch("v1.labeller.get_policy_year", return_value="2025"),
-            patch("v1.labeller.load_overrides", return_value=[]),
+            patch("backend.labeller.get_policy_year", return_value="2025"),
+            patch("backend.labeller.load_overrides", return_value=[]),
         ):
             labelled = label_report(report, "profit_and_loss")
 
@@ -49,8 +49,8 @@ class DecisionTraceTests(unittest.TestCase):
             }
         )
         with (
-            patch("v1.labeller.get_policy_year", return_value="2025"),
-            patch("v1.labeller.load_overrides", return_value=[]),
+            patch("backend.labeller.get_policy_year", return_value="2025"),
+            patch("backend.labeller.load_overrides", return_value=[]),
         ):
             labelled = label_report(report, "profit_and_loss")
 

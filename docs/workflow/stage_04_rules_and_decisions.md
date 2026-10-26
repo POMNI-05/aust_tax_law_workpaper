@@ -2,8 +2,8 @@
 
 ## Purpose
 
-The `v1/itr_rules*.py` packs and `v1/labeller.py` classify accounts against
-year-specific ITR references. `v1/decision_trace.py` turns those results into
+The `backend/itr_rules*.py` packs and `backend/labeller.py` classify accounts against
+year-specific ITR references. `backend/decision_trace.py` turns those results into
 machine-readable evidence and deterministic review items.
 
 ## Inputs and outputs
