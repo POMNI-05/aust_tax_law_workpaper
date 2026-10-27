@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -129,12 +130,25 @@ def _detect_reports(bundle: cleaner.CleanedReports) -> list[DetectedReport]:
 
 
 def _amount_column(df) -> str | None:
+    amount_cols: list[str] = []
     for col in df.columns:
         if str(col).endswith(" Parse Status"):
             continue
         if col not in {ACCOUNT_LABEL_COL, "Row Type", "Report Section", "Source Row"}:
             if df[col].dtype.kind in {"i", "u", "f"}:
-                return col
+                amount_cols.append(col)
+
+    year = str(cleaner.SELECTED_INCOME_YEAR)
+    selected_year_cols = [
+        col for col in amount_cols
+        if re.search(rf"\b{re.escape(year)}\b", str(col))
+    ]
+    if len(selected_year_cols) == 1:
+        return selected_year_cols[0]
+    if len(selected_year_cols) > 1:
+        return None
+    if len(amount_cols) == 1 and not re.search(r"\b20\d{2}\b", str(amount_cols[0])):
+        return amount_cols[0]
     return None
 
 

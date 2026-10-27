@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 ReportType = Literal[
     "profit_and_loss",
@@ -63,8 +63,9 @@ class LabelRule:
     support_display_ref: str = ""
     support_label: str = ""
     rule_id: str = ""
+    draft_eligible: bool = False
 
-    def as_mapping(self) -> dict[str, str]:
+    def as_mapping(self) -> dict[str, Any]:
         return {
             "ITR Ref": self.itr_ref,
             "ITR Label": self.itr_label,
@@ -88,6 +89,7 @@ class LabelRule:
             "Matched Pattern": "",
             "Matched Text": "",
             "Rule Source": "rule",
+            "Draft Eligible": self.draft_eligible,
         }
 
 
@@ -121,6 +123,7 @@ def R(
     support_display_ref: str = "",
     support_label: str = "",
     rule_id: str = "",
+    draft_eligible: bool = False,
 ) -> LabelRule:
     normalised_patterns = tuple(patterns)
     if recon_itr_ref and not recon_display_ref:
@@ -143,6 +146,7 @@ def R(
         support_label=support_label,
         rule_id=rule_id
         or _derived_rule_id(normalised_patterns, itr_ref, itr_label, treatment, reason),
+        draft_eligible=draft_eligible,
     )
 
 
@@ -294,6 +298,7 @@ PL_RULES: list[LabelRule] = [
         "7W_non_deductible_expenses",
         "7W",
         "add",
+        draft_eligible=True,
     ),
 
     R(

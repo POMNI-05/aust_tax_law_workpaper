@@ -47,6 +47,7 @@ LABEL_COLUMNS = [
     "Matched Text",
     "Rule Source",
     "Auto Post",
+    "Draft Eligible",
 ]
 
 
@@ -344,6 +345,13 @@ def label_report(df: pd.DataFrame, report_type: str) -> pd.DataFrame:
             report_type=report_type,
             report_section=str(report_section or ""),
             overrides=user_overrides,
+        )
+        # Draft eligibility belongs to the reviewed versioned rule, not an
+        # account-label override that may change classification metadata.
+        route_fields = ("Recon ITR Ref", "Recon Display Ref", "Recon Direction", "Rule ID")
+        final_mapping["Draft Eligible"] = (
+            base_mapping.get("Draft Eligible", False) is True
+            and all(final_mapping.get(key, "") == base_mapping.get(key, "") for key in route_fields)
         )
         if report_type == "balance_sheet":
             final_mapping = _apply_balance_sheet_section_conflict_review(

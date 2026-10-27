@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 
 try:
-    from .cleaner import CleanedReports, load_clean_report_bundle, clean_amount
+    from .cleaner import CleanedReports, load_clean_report_bundle, clean_amount, parse_amount, AmountParseStatus
     from .config import (
         COMPANY_TAX_RATE_CATEGORY,
         SELECTED_ATO_POLICY,
@@ -24,7 +24,7 @@ try:
     from .labeller import label_report, extract_review_items
     from .decision_trace import build_decision_traces, review_items_from_traces
 except ImportError:  # Direct-script compatibility.
-    from cleaner import CleanedReports, load_clean_report_bundle, clean_amount
+    from cleaner import CleanedReports, load_clean_report_bundle, clean_amount, parse_amount, AmountParseStatus
     from config import (
         COMPANY_TAX_RATE_CATEGORY,
         SELECTED_ATO_POLICY,
@@ -535,8 +535,8 @@ def _auto_reconciliation_rows_from_labelled_pl(
 
         auto_post = str(row.get("Auto Post", "") or "").strip().lower()
         if auto_post not in {"yes", "true", "1", "approved"}:
-            # Rule matches are proposals. They must not change taxable income
-            # unless an accountant has explicitly approved automatic posting.
+            # This path handles reviewed postings. Draft-eligible proposals
+            # enter the same draft calculation through the proposal path.
             continue
 
         validate_adjustment_label(recon_ref, str(row.get(account_col, "")))
@@ -588,13 +588,14 @@ def _auto_reconciliation_rows_from_labelled_pl(
 def _unapproved_reconciliation_rows_from_labelled_pl(
     labelled_pl: pd.DataFrame,
     periods: list[str],
+    source_file: str = "",
+    source_sheet: str = "",
 ) -> list[dict]:
-    """Return visible Item 7 candidates that are deliberately excluded.
+    """Return visible proposed Item 7 amounts with an explicit draft gate.
 
-    A reconciliation with unresolved adjustments remains preliminary. The
-    source-backed candidates are included in the preliminary calculation so a
-    reviewer has a usable starting number, but remain separately marked for
-    accountant approval before a lodged tax-return value is finalised.
+    Account-name/rule matches are review prompts, not evidence of deductibility
+    or of the correct adjustment amount. A configured draft-eligible rule may
+    contribute its traceable source amount to a preliminary draft only.
     """
 
     if labelled_pl is None or labelled_pl.empty:
@@ -614,6 +615,7 @@ def _unapproved_reconciliation_rows_from_labelled_pl(
         ).strip()
         direction = str(row.get("Recon Direction", "") or "").strip().lower()
         auto_post = str(row.get("Auto Post", "") or "").strip().lower()
+        configured_draft_eligible = row.get("Draft Eligible", False) is True
 
         if (
             not recon_ref
@@ -630,23 +632,57 @@ def _unapproved_reconciliation_rows_from_labelled_pl(
             # in every Tab 3 account description.
             "Description": str(row.get(account_col, "") or "").strip(),
             "ITR Ref": recon_ref,
-            "Review note": (
-                f"Included in preliminary calculation only; accountant approval "
-                f"required before final lodgment. "
-                f"{str(row.get('Review Note', '') or '').strip()}"
-            ).strip(),
-            # Internal calculation evidence.  This field is deliberately not
-            # rendered in the workpaper; the visible description remains the
-            # accountant-facing explanation.
-            "_Scenario direction": direction,
+            "Review note": str(row.get("Review Note", "") or "").strip(),
+            "_Draft eligible": False,
+            "_Rule ID": str(row.get("Rule ID", "") or "").strip(),
+            "_Matched pattern": str(row.get("Matched Pattern", "") or "").strip(),
+            "_Matched text": str(row.get("Matched Text", "") or "").strip(),
+            "_Source row": row.get("Source Row", ""),
+            "_Source file": source_file,
+            "_Source sheet": source_sheet,
+            "_Draft assumption": (
+                "Uses the full source account balance as the proposed adjustment; "
+                "no apportionment, deductibility or legal treatment is inferred."
+            ),
+            "_Proposal direction": direction,
         }
         has_amount = False
         for period in periods:
-            amount = clean_amount(row.get(period, 0.0))
-            output_row[period] = amount
-            has_amount = has_amount or abs(amount) > 0.005
+            amount_col = next((col for col in row.index if str(col) == f"{period} Parse Status"), None)
+            if amount_col and str(row.get(amount_col, "")).lower() not in {"valid", "blank"}:
+                raise ValueError(
+                    f"CELL-002: invalid source amount for {output_row['Description']} "
+                    f"in {period}; no adjustment amount was inferred"
+                )
+            parsed = parse_amount(row.get(period))
+            if parsed.status == AmountParseStatus.INVALID:
+                raise ValueError(f"CELL-002: invalid source adjustment amount in {period}")
+            output_row[period] = parsed.value
+            has_amount = has_amount or (parsed.value is not None and abs(parsed.value) > 0.005)
 
+        source_row = output_row["_Source row"]
+        traceable_row = source_row is not None and not pd.isna(source_row) and str(source_row).strip() != ""
+        output_row["_Draft eligible"] = (
+            configured_draft_eligible and traceable_row
+            and bool(output_row["_Rule ID"])
+            and direction == get_item7_direction(recon_ref)
+        )
         if has_amount:
+            evidence = [
+                f"Source: {source_file} :: {source_sheet}" if source_file or source_sheet else "",
+                f"Source row {source_row}" if traceable_row else "Source row unavailable; excluded from draft calculation",
+                f"Rule {output_row['_Rule ID']}" if output_row["_Rule ID"] else "",
+                f"Matched pattern: {output_row['_Matched pattern']}" if output_row["_Matched pattern"] else "",
+                (
+                    f"PROPOSED — included in preliminary draft; direction {direction} at Item {recon_ref}."
+                    if output_row["_Draft eligible"]
+                    else f"UNRESOLVED — excluded from draft calculation; proposed direction {direction} at Item {recon_ref}."
+                ),
+                output_row["_Draft assumption"],
+                "Accountant must verify source, allocation, amount and tax treatment.",
+                output_row["Review note"],
+            ]
+            output_row["Review note"] = " ".join(item for item in evidence if item)
             candidates.append(output_row)
 
     return candidates
@@ -655,6 +691,8 @@ def _unapproved_reconciliation_rows_from_labelled_pl(
 def _build_proposed_adjustments(
     labelled_pl: pd.DataFrame,
     periods: list[str],
+    source_file: str = "",
+    source_sheet: str = "",
 ) -> pd.DataFrame:
     columns = [
         "Account",
@@ -663,7 +701,14 @@ def _build_proposed_adjustments(
         *periods,
         "Treatment",
         "Confidence",
-        "Approval Status",
+        "Draft Status",
+        "Draft Eligible",
+        "Calculation Assumption",
+        "Source Row",
+        "Rule ID",
+        "Matched Pattern",
+        "Source File",
+        "Source Sheet",
         "Review Note",
     ]
 
@@ -686,21 +731,55 @@ def _build_proposed_adjustments(
             continue
 
         auto_post = str(row.get("Auto Post", "") or "").strip().lower()
+        source_row = row.get("Source Row", "")
+        traceable_source = (
+            source_row is not None
+            and not pd.isna(source_row)
+            and str(source_row).strip() != ""
+        )
+        has_traceable_amount = any(
+            abs(clean_amount(row.get(period, 0.0))) >= 0.005
+            and (
+                f"{period} Parse Status" not in row.index
+                or str(row.get(f"{period} Parse Status", "")).lower() == "valid"
+            )
+            for period in periods
+        )
+        draft_eligible = (
+            row.get("Draft Eligible", False) is True
+            and traceable_source
+            and has_traceable_amount
+            and bool(str(row.get("Rule ID", "") or "").strip())
+            and str(row.get("Recon Direction", "") or "").strip().lower() == get_item7_direction(recon_ref)
+        )
         proposal: dict[str, Any] = {
             "Account": str(row.get(account_col, "") or "").strip(),
             "ITR Ref": recon_ref,
             "Direction": str(row.get("Recon Direction", "") or "").strip(),
             "Treatment": str(row.get("Treatment", "") or "").strip(),
             "Confidence": str(row.get("Confidence", "") or "").strip(),
-            "Approval Status": (
-                "Approved for posting"
+            "Draft Status": (
+                "Approved rule posting"
                 if auto_post in {"yes", "true", "1", "approved"}
-                else "Review required - not posted"
+                else "Proposed — included in preliminary draft"
+                if draft_eligible
+                else "Unresolved — excluded from draft calculation"
             ),
+            "Draft Eligible": draft_eligible,
+            "Calculation Assumption": (
+                "Full source balance used as proposed adjustment; accountant must verify amount, "
+                "allocation and tax treatment."
+            ),
+            "Source Row": source_row,
+            "Rule ID": row.get("Rule ID", ""),
+            "Matched Pattern": row.get("Matched Pattern", ""),
+            "Source File": source_file,
+            "Source Sheet": source_sheet,
             "Review Note": str(row.get("Review Note", "") or "").strip(),
         }
         for period in periods:
-            proposal[period] = clean_amount(row.get(period, 0.0))
+            clean_amount(row.get(period))  # Reject invalid monetary text before displaying evidence.
+            proposal[period] = parse_amount(row.get(period)).value
         proposals.append(proposal)
 
     return pd.DataFrame(proposals, columns=columns)
@@ -711,13 +790,12 @@ def _tax_depreciation_reconciliation_rows(
     reviewed_tax_depreciation_total: float | None,
     approved_for_posting: bool,
 ) -> tuple[list[dict], dict[str, float]]:
-    """Post only an explicitly approved accountant-entered tax deduction to 7F."""
+    """Return the entered 7F amount; unapproved inputs remain draft proposals."""
     rows: list[dict] = []
     total_subtractions = {period: 0.0 for period in periods}
 
     if (
         reviewed_tax_depreciation_total is None
-        or not approved_for_posting
         or abs(reviewed_tax_depreciation_total) < 0.005
     ):
         return rows, total_subtractions
@@ -728,10 +806,17 @@ def _tax_depreciation_reconciliation_rows(
     validate_adjustment_label("7F", "Tax depreciation / decline in value")
 
     row = {
-        "Line Type": "detail",
+        "Line Type": "detail" if approved_for_posting else "proposal",
         "Description": "Tax depreciation / decline in value",
         "ITR Ref": "7F",
-        "Review note": "Posted from an explicitly accountant-approved 7F input.",
+        "Review note": (
+            "Accountant-reviewed amount; approval recorded."
+            if approved_for_posting
+            else "Source: Inputs & Overrides / entered depreciation amount. "
+            "Rule: draft-tax-depreciation-input-v1. Assumption: use the full entered "
+            "deduction for the selected year, replacing any detected schedule total. "
+            "Verify supporting schedule, asset eligibility and calculation."
+        ),
     }
 
     requested_period = _requested_period(periods)
@@ -756,11 +841,12 @@ def _detected_tax_depreciation_schedule_rows(
     tax_depreciation_source: str | None,
     matches_selected_period: bool,
 ) -> list[dict]:
-    """Return a matching tax-law schedule as a preliminary Item 7F deduction."""
+    """Return a matching tax-law schedule as an eligible preliminary 7F proposal."""
     if (
         tax_depreciation_total is None
         or abs(float(tax_depreciation_total)) < 0.005
         or not matches_selected_period
+        or not str(tax_depreciation_source or "").strip()
         or not periods
     ):
         return []
@@ -771,15 +857,18 @@ def _detected_tax_depreciation_schedule_rows(
 
     validate_adjustment_label("7F", "Tax depreciation / decline in value")
     row = {
-        "Line Type": "detail",
+        "Line Type": "proposal",
         "Description": "Tax depreciation / decline in value",
         "ITR Ref": "7F",
+        "_Draft eligible": True,
         "Review note": (
-            "Included in preliminary calculation from the detected tax-law "
-            "depreciation schedule; accountant review may revise it before lodgment. "
+            "Preliminary proposal from the matching-year tax depreciation schedule; "
+            "Rule: draft-tax-depreciation-schedule-v1. Assumption: use the full "
+            "extracted deduction total; asset-level deductions are not recalculated. "
+            "verify asset eligibility, rates and extracted total. "
             f"Source: {tax_depreciation_source or 'tax depreciation schedule'}"
         ),
-        "_Scenario direction": "subtract",
+        "_Proposal direction": "subtract",
     }
     for period in periods:
         row[period] = float(tax_depreciation_total) if period == requested_period else 0.0
@@ -923,7 +1012,20 @@ def _build_tax_reconciliation(
     tax_depreciation_matches_selected_period: bool = False,
     reviewed_tax_depreciation_total: float | None = None,
     tax_depreciation_approved_for_posting: bool = False,
+    pl_source_file: str = "",
+    pl_source_sheet: str = "",
 ) -> pd.DataFrame:
+    # The frame represents one source P&L. Repeated identical source rows must
+    # not create a second adjustment; conflicting copies require repair.
+    if labelled_pl is not None and "Source Row" in labelled_pl.columns:
+        source_rows = labelled_pl["Source Row"]
+        traceable = source_rows.notna() & source_rows.astype(str).str.strip().ne("")
+        duplicate_sources = labelled_pl[traceable & source_rows.duplicated(keep=False)]
+        for source_row, copies in duplicate_sources.groupby("Source Row"):
+            if len(copies.drop_duplicates()) > 1:
+                raise ValueError(f"RECON-001: conflicting copies of P&L source row {source_row}")
+        labelled_pl = labelled_pl[~(traceable & source_rows.duplicated())]
+
     net_profit_by_period, net_profit_methods = _extract_net_profit_by_period(clean_pl_df)
     periods = list(net_profit_by_period.keys())
 
@@ -956,18 +1058,16 @@ def _build_tax_reconciliation(
 
     add_rows = auto_add_rows + manual_add_rows
     subtract_rows = auto_subtract_rows + manual_subtract_rows + tax_dep_rows
-    unapproved_rows = _unapproved_reconciliation_rows_from_labelled_pl(
+    proposed_rows = _unapproved_reconciliation_rows_from_labelled_pl(
         labelled_pl,
         periods,
+        source_file=pl_source_file,
+        source_sheet=pl_source_sheet,
     )
-    # An approved accountant amount is authoritative and must not be counted
-    # again as detected schedule evidence.  Otherwise a matching tax-law
-    # schedule is useful preliminary 7F evidence for the later review.
-    if not (
-        reviewed_tax_depreciation_total is not None
-        and tax_depreciation_approved_for_posting
-    ):
-        unapproved_rows.extend(
+    # An entered reviewer amount is authoritative (including explicit zero)
+    # and suppresses the detected schedule to prevent duplicate 7F amounts.
+    if reviewed_tax_depreciation_total is None:
+        proposed_rows.extend(
             _detected_tax_depreciation_schedule_rows(
                 periods,
                 tax_depreciation_total,
@@ -990,45 +1090,47 @@ def _build_tax_reconciliation(
         for period in periods
     }
 
+    eligible_proposals = [
+        row for row in proposed_rows
+        if row.get("_Draft eligible") is True
+    ]
+    unresolved_proposals = [
+        row for row in proposed_rows
+        if row.get("_Draft eligible") is not True
+    ]
+    for proposal in eligible_proposals:
+        proposal["Line Type"] = "proposal"
+    for proposal in unresolved_proposals:
+        proposal["Line Type"] = "unresolved"
+
+    draft_add_rows = [row for row in eligible_proposals if row.get("_Proposal direction") == "add"]
+    draft_subtract_rows = [row for row in eligible_proposals if row.get("_Proposal direction") == "subtract"]
+    add_rows.extend(draft_add_rows)
+    subtract_rows.extend(draft_subtract_rows)
+    for period in periods:
+        total_add_backs[period] += sum(clean_amount(row.get(period, 0.0)) for row in draft_add_rows)
+        total_subtractions[period] += sum(clean_amount(row.get(period, 0.0)) for row in draft_subtract_rows)
     taxable_income = {
         period: net_profit_by_period[period] + total_add_backs[period] - total_subtractions[period]
         for period in periods
     }
 
-    scenario_taxable_income = dict(taxable_income)
-    preliminary_add_backs = dict(total_add_backs)
-    preliminary_subtractions = dict(total_subtractions)
-    for pending_row in unapproved_rows:
-        direction = pending_row.get("_Scenario direction")
-        for period in periods:
-            amount = clean_amount(pending_row.get(period, 0.0))
-            if direction == "add":
-                scenario_taxable_income[period] += amount
-                preliminary_add_backs[period] += amount
-            elif direction == "subtract":
-                scenario_taxable_income[period] -= amount
-                preliminary_subtractions[period] += amount
-
-    # Tab 3 is a short calculation bridge.  Approved and review-required
-    # proposals both feed the preliminary number, while each row's review note
-    # remains the audit evidence for the later accountant review.
+    # These proposals are displayed after the calculated result and never
+    # enter the subtotal formula until a rule is explicitly draft eligible.
     review_add_rows = [
-        row for row in unapproved_rows if row.get("_Scenario direction") == "add"
+        row for row in unresolved_proposals if row.get("_Proposal direction") == "add"
     ]
     review_subtract_rows = [
-        row for row in unapproved_rows if row.get("_Scenario direction") == "subtract"
+        row for row in unresolved_proposals if row.get("_Proposal direction") == "subtract"
     ]
-    for row in review_add_rows + review_subtract_rows:
-        row["Line Type"] = "detail"
-
-    if add_rows or review_add_rows:
+    if add_rows:
         rows.append(_blank_periods({
             "Line Type": "add_heading",
             "Description": "ADD",
             "ITR Ref": "",
             "Review note": "Add these amounts to accounting profit/(loss).",
         }, periods))
-        rows.extend(add_rows + review_add_rows)
+        rows.extend(add_rows)
         total_add_row = {
             "Line Type": "subtotal",
             "Description": "Total ADD",
@@ -1036,17 +1138,17 @@ def _build_tax_reconciliation(
             "Review note": "",
         }
         for period in periods:
-            total_add_row[period] = preliminary_add_backs[period]
+            total_add_row[period] = total_add_backs[period]
         rows.append(total_add_row)
 
-    if subtract_rows or review_subtract_rows:
+    if subtract_rows:
         rows.append(_blank_periods({
             "Line Type": "subtract_heading",
             "Description": "SUBTRACT",
             "ITR Ref": "",
             "Review note": "Subtract these amounts from accounting profit/(loss).",
         }, periods))
-        rows.extend(subtract_rows + review_subtract_rows)
+        rows.extend(subtract_rows)
         total_subtract_row = {
             "Line Type": "subtotal",
             "Description": "Total SUBTRACT",
@@ -1054,45 +1156,38 @@ def _build_tax_reconciliation(
             "Review note": "",
         }
         for period in periods:
-            total_subtract_row[period] = preliminary_subtractions[period]
+            total_subtract_row[period] = total_subtractions[period]
         rows.append(total_subtract_row)
 
-    completeness_rows, completeness_requires_review = _reconciliation_completeness_rows(
-        labelled_pl,
-        net_profit_methods,
-    )
-    is_preliminary = bool(unapproved_rows) or completeness_requires_review
-
-    preliminary_taxable_income = (
-        scenario_taxable_income if unapproved_rows else taxable_income
-    )
+    # This program creates accountant-review workpapers, never lodged returns.
     taxable_row = {
         "Line Type": "result",
-        "Description": (
-            "Preliminary taxable income/(loss) — Item 7T"
-            if unapproved_rows
-            else "Preliminary taxable income/(loss) — review required"
-            if completeness_requires_review
-            else "Taxable/net income or loss — Item 7T"
-        ),
-        "ITR Ref": "7T (preliminary)" if is_preliminary else "7T",
-        "Review note": (
-            "Pre-calculation only: accountant review may revise this before the final lodged Item 7T."
-            if is_preliminary
-            else ""
-        ),
+        "Description": "Preliminary draft taxable income/(loss) — Item 7T (unverified)",
+        "ITR Ref": "7T (preliminary)",
+        "Review note": "Draft workpaper calculation only; not accountant-verified or a final lodgment amount.",
         "Tax return code": (
-            "L (preliminary)" if is_preliminary else "L"
+            "L (preliminary)"
         ) if (
             _requested_period(periods) is not None
-            and preliminary_taxable_income[_requested_period(periods)] < 0
+            and taxable_income[_requested_period(periods)] < 0
         ) else "",
     }
 
     for period in periods:
-        taxable_row[period] = preliminary_taxable_income[period]
+        taxable_row[period] = taxable_income[period]
 
     rows.append(taxable_row)
+
+    if unresolved_proposals:
+        rows.append(_blank_periods({
+            "Line Type": "heading",
+            "Description": "UNRESOLVED ADJUSTMENTS — EXCLUDED FROM DRAFT ITEM 7T",
+            "ITR Ref": "",
+            "Review note": (
+                "Review source evidence, amount and treatment; this item has no supported draft calculation route."
+            ),
+        }, periods))
+        rows.extend(review_add_rows + review_subtract_rows)
 
     ordered_cols = [
         "Line Type",
@@ -1570,36 +1665,68 @@ def _build_bs_checks(clean_bs_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([equity_variance, net_assets_variance])
 
 
-def _build_tax_depreciation_review_item(reports: CleanedReports) -> pd.DataFrame:
-    if reports.tax_depreciation_total is None:
+def _build_tax_depreciation_review_item(
+    reports: CleanedReports,
+    reviewed_tax_depreciation_total: float | None = None,
+) -> pd.DataFrame:
+    if reports.tax_depreciation_total is None and reviewed_tax_depreciation_total is None:
         return pd.DataFrame()
 
-    if reports.tax_depreciation_matches_selected_period and abs(reports.tax_depreciation_total) >= 0.005:
+    entered_amount = reviewed_tax_depreciation_total is not None
+    eligible_schedule = (
+        reports.tax_depreciation_matches_selected_period
+        and reports.tax_depreciation_total is not None
+        and abs(reports.tax_depreciation_total) >= 0.005
+        and bool(str(reports.tax_depreciation_source or "").strip())
+    )
+    if entered_amount:
+        amount = reviewed_tax_depreciation_total
+        source = "Inputs & Overrides / entered depreciation amount"
+        rule_id = "draft-tax-depreciation-input-v1"
+        note = (
+            "The entered selected-year deduction replaces the detected schedule "
+            "total, including when the entered amount is zero. Verify supporting "
+            "schedule, asset eligibility and calculation."
+        )
+        assumption = "Use the full entered deduction; detected schedule is not added again."
+    elif eligible_schedule:
+        amount = reports.tax_depreciation_total
+        source = reports.tax_depreciation_source
+        rule_id = "draft-tax-depreciation-schedule-v1"
         note = (
             "Matching tax-law depreciation schedule detected. Its total is included "
             "in preliminary Item 7F and remains subject to accountant review."
         )
+        assumption = "Use the full extracted matching-year deduction; no asset-level recalculation."
     elif not reports.tax_depreciation_matches_selected_period:
+        amount, source, rule_id, assumption = None, reports.tax_depreciation_source, "", ""
         note = (
             "Tax depreciation schedule detected for a different income year; it is "
             "support evidence only and is not used in the selected-year Item 7F."
         )
     else:
+        amount, source, rule_id, assumption = None, reports.tax_depreciation_source, "", ""
         note = (
-            "Tax depreciation schedule detected, but its extracted total is zero; "
-            "it is support evidence only and is not used in preliminary Item 7F."
+            "Tax depreciation schedule has no non-zero source-backed deduction; "
+            "support evidence only, excluded from preliminary Item 7F."
         )
-    recon_ref = ""
+    included = amount is not None and abs(amount) >= 0.005
 
     return pd.DataFrame([
         {
-            "Source": "Tax Depreciation",
+            "Source": source or "Tax Depreciation",
             "Section": "Support schedule",
             "Account": "Tax depreciation / decline in value",
             "ITR Ref": "7F",
-            "Recon ITR Ref": recon_ref,
+            "Recon ITR Ref": "7F" if included else "",
             "Review Note": note,
             "Reason": f"Extracted total {reports.tax_depreciation_total} from {reports.tax_depreciation_source}.",
+            "Draft Amount": f"{SELECTED_INCOME_YEAR}: {amount:,.2f}" if amount is not None else "",
+            "Draft Treatment": "subtract at 7F" if included else "Support only",
+            "Draft Status": "Included in draft — verify deduction" if included else "Review-only — excluded",
+            "Rule ID": rule_id,
+            "Calculation Assumption": assumption,
+            "Review Required": "Verify schedule, selected year, eligibility, rates and amount",
         }
     ])
 
@@ -1670,6 +1797,8 @@ def build_workpaper(reports: CleanedReports | None = None) -> Workpaper:
         tax_depreciation_matches_selected_period=reports.tax_depreciation_matches_selected_period,
         reviewed_tax_depreciation_total=reviewed_tax_depreciation_total,
         tax_depreciation_approved_for_posting=tax_depreciation_approved_for_posting,
+        pl_source_file=reports.pl_input.source_path.name,
+        pl_source_sheet=reports.pl_input.sheet_name,
     )
     tax_reconciliation_review_checks = _build_tax_reconciliation_review_checks(
         clean_pl_df,
@@ -1709,16 +1838,53 @@ def build_workpaper(reports: CleanedReports | None = None) -> Workpaper:
         depreciation_table.loc[0, "Review note"] = (
             "Approved for posting at 7F."
             if tax_depreciation_approved_for_posting
-            else "Enter/confirm the reviewed deduction and obtain accountant approval before posting at 7F."
+            else "An entered amount is used as a preliminary 7F proposal and replaces any detected schedule total; accountant review is required."
         )
 
-    proposed_adjustments = _build_proposed_adjustments(labelled_pl, periods)
+    proposed_adjustments = _build_proposed_adjustments(
+        labelled_pl,
+        periods,
+        source_file=reports.pl_input.source_path.name,
+        source_sheet=reports.pl_input.sheet_name,
+    )
 
     review_blocks = [
         extract_review_items(labelled_pl, "P&L"),
         extract_review_items(labelled_bs, "BS"),
-        _build_tax_depreciation_review_item(reports),
+        _build_tax_depreciation_review_item(reports, reviewed_tax_depreciation_total),
     ]
+
+    proposal_review_rows = []
+    for proposal in _unapproved_reconciliation_rows_from_labelled_pl(
+        labelled_pl,
+        periods,
+        source_file=reports.pl_input.source_path.name,
+        source_sheet=reports.pl_input.sheet_name,
+    ):
+        proposal_review_rows.append({
+            "Source": reports.pl_input.source_path.name,
+            "Section": reports.pl_input.sheet_name,
+            "Account": proposal["Description"],
+            "ITR Ref": proposal["ITR Ref"],
+            "Recon ITR Ref": proposal["ITR Ref"],
+            "Review Note": proposal["Review note"],
+            "Reason": (
+                "Proposed tax adjustment; included in preliminary draft" if proposal["_Draft eligible"]
+                else "Unresolved adjustment; excluded from preliminary draft calculation"
+            ),
+            "Draft Amount": ", ".join(
+                f"{period}: {proposal[period]:,.2f}" for period in periods
+                if proposal[period] is not None and abs(proposal[period]) > 0.005
+            ),
+            "Draft Treatment": f"{proposal['_Proposal direction']} at {proposal['ITR Ref']}",
+            "Draft Status": "Proposed — included in draft" if proposal["_Draft eligible"] else "Unresolved — excluded",
+            "Source Row": proposal["_Source row"],
+            "Rule ID": proposal["_Rule ID"],
+            "Calculation Assumption": proposal["_Draft assumption"],
+            "Review Required": "Verify source, allocation, amount and tax treatment",
+        })
+    if proposal_review_rows:
+        review_blocks.append(pd.DataFrame(proposal_review_rows))
 
     review_blocks = [df for df in review_blocks if df is not None and not df.empty]
 

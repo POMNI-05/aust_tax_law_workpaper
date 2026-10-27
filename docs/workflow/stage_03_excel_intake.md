@@ -20,6 +20,7 @@ Current review backlog: [R-01 to R-03 and R-15 to R-19](review_backlog_20260825.
 | Resolved | `INTAKE-004`: a re-uploaded generated workpaper could make the P&L reconciliation appear to have no source amount. | The old output's ITR helper/summary columns were being re-read as source amounts. Intake now ignores only columns carrying generated-workpaper markers (and a summary's companion formula column), then selects the single actual source-period column. Header scoring also no longer treats a ledger balance that happens to contain `20xx` as a date. A missing/ambiguous requested year still fails closed as `PERIOD-001`. |
 | Resolved | Invalid monetary text could become `0.0`. | `$400`, commas and parentheses parse safely; blank, explicit zero and valid amount remain distinct; `$12O0`, booleans and non-finite values fail with a structured error. |
 | Guardrail | Header/period detection is ambiguous. | Stop with an actionable error rather than selecting the densest numeric column. |
+| Resolved | Scan observations could show the first comparative period instead of the selected income year. | `_amount_column` now selects the unique numeric column containing `SELECTED_INCOME_YEAR`. It returns no amount when a multi-period report has no selected-year match; only an unmarked, single-period amount header is used as a generic fallback. Regression coverage reverses FY2025/FY2026 column order and checks the selected year. |
 
 ## Debug procedure
 
@@ -28,3 +29,5 @@ Current review backlog: [R-01 to R-03 and R-15 to R-19](review_backlog_20260825.
 3. Run `python -m unittest tests.test_minimal_safety_repairs -v`.
 4. Add the smallest representative workbook/cell case as a regression test;
    do not add a coercion-to-zero fallback.
+5. Run `python -m unittest tests.test_scan_runner -v` after changing Scan-year
+   propagation or scan observation amount selection.

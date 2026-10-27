@@ -30,6 +30,8 @@ a stage as complete if its exit criterion or validation has not been met.
 - AI is display-only review/explanation. It cannot modify rules, workbooks,
   classifications, tax rates, or tax adjustments.
 - Every rule-driven label must retain machine-readable decision evidence.
+- Draft workpapers may include explicitly draft-eligible, source-backed
+  deterministic proposals before accountant review; they remain unverified.
 
 ## Reusable engineering takeaways
 
@@ -259,6 +261,50 @@ a stage as complete if its exit criterion or validation has not been met.
   user experience. Setup and limits are in
   [`local_ai_review.md`](local_ai_review.md); the completed plan is
   [`local_ai_review_todo_20261027.md`](TODO/local_ai_review_todo_20261027.md).
+
+### Reconciliation safety and tool-integration audit — 27 October 2026
+
+- **Policy superseded 27 October 2026:** this audit entry initially recorded
+  approved-only Item 7T. The current draft-workpaper policy is that explicitly
+  draft-eligible, source-traceable proposals may enter a preliminary formula;
+  unresolved proposals remain visible outside it. Proposed values are not tax
+  conclusions and require accountant review. See the latest reconciliation
+  stage log and task plan.
+- Scan now validates and passes the selected policy year to its subprocess, and
+  scan observations select the matching source-period column instead of the
+  first numeric period. Synthetic FY2025/FY2026 execution verifies Scan and
+  Generation agree on FY2025 and a matching depreciation schedule.
+- The approved depreciation override continues to suppress a duplicate detected
+  schedule row. This does not solve semantic duplicates between unrelated
+  adjustment entry paths or create durable approval lineage.
+- Focused suite passed 44 tests; final full suite passed 128 tests. Synthetic
+  Scan → Generation → mocked local review created a workbook and audit sidecar;
+  no local model or external AI service was called.
+- No MCP server/tools exist yet. Tool policy, integration map, risks and the
+  remaining pre-MCP backlog are in
+  [`reconciliation_and_tool_audit_20261027.md`](TODO/reconciliation_and_tool_audit_20261027.md).
+
+### Draft-workpaper reconciliation annotations — 27 October 2026
+
+- Restored draft inclusion only for explicit `Draft Eligible` rule matches
+  with a traceable source row. Entertainment is currently configured as a
+  draft proposal; matching-year depreciation schedules and reviewer-entered
+  depreciation amounts are also preliminary proposals with source/review
+  annotations. Other rule matches remain visible as unresolved and excluded.
+- Every generated Item 7T is labelled preliminary/unverified;
+  proposal amount cells carry Excel Notes and proposal assumptions/source/rule
+  evidence also appears in Inputs & Overrides and a dedicated Review Items
+  worksheet. The latter consolidates classification, adjustment, depreciation
+  and reconciliation-completeness findings; Checks retains output/BS checks.
+- Scan/Generation financial-year propagation, selected-period amount choice,
+  and the depreciation override/schedule de-duplication guard remain intact.
+- Follow-up validation: 138 tests and 27 subtests passed. Notes explicitly
+  include source account, period and amount and survive XLSX save/reload.
+  Identical repeated source rows calculate once; conflicting copies stop.
+  Route-changing label overrides cannot inherit a different rule's draft
+  eligibility. Invalid parsed amounts fail validation; missing amounts remain
+  blank. Depreciation review text now reflects an entered override (including
+  zero) replacing the detected schedule total.
 
 ## Current roadmap
 

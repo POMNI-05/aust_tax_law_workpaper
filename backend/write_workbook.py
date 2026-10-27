@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
+from openpyxl.comments import Comment
 from openpyxl.formula.translate import Translator
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -492,6 +493,27 @@ def _write_tax_reconciliation_table(
                     if str(SELECTED_INCOME_YEAR) in str(col_name)
                     else HEADER_FILL
                 )
+                if (
+                    line_type in {"proposal", "unresolved"}
+                    and isinstance(value, (int, float))
+                    and abs(value) >= 0.005
+                ):
+                    cell.comment = Comment(
+                        (
+                            "PRELIMINARY DRAFT PROPOSAL — NOT VERIFIED\n\n"
+                            if line_type == "proposal"
+                            else "UNRESOLVED PROPOSAL — EXCLUDED FROM DRAFT ITEM 7T\n\n"
+                        )
+                        + f"Source account / adjustment: {description}\n"
+                        f"Source amount ({col_name}): {value:,.2f}\n"
+                        f"Proposed treatment: Item {row.get('ITR Ref', '')}; "
+                        "direction and basis are stated in the Review note.\n"
+                        f"Calculation assumptions and review requirement: "
+                        f"{row.get('Review note', '')}\n\n"
+                        "An account-name match or extracted schedule is not proof "
+                        "of deductibility or the correct tax amount.",
+                        "Tax Workpaper",
+                    )
 
         if line_type == "heading":
             for c in range(start_col, last_col + 1):
@@ -507,10 +529,14 @@ def _write_tax_reconciliation_table(
             for c in range(start_col, last_col + 1):
                 ws.cell(r_idx, c).font = NOTE_FONT
 
-        elif line_type == "review":
+        elif line_type in {"review", "unresolved"}:
             for c in range(start_col, last_col + 1):
                 ws.cell(r_idx, c).fill = REVIEW_FILL
             ws.cell(r_idx, start_col).font = BOLD_FONT
+
+        elif line_type == "proposal":
+            for c in range(start_col, last_col + 1):
+                ws.cell(r_idx, c).fill = REVIEW_FILL
 
         elif line_type == "subtotal":
             for c in range(start_col, last_col + 1):
@@ -1081,7 +1107,7 @@ def _write_inputs_sheet(wb: Workbook, workpaper) -> None:
 
     proposed = getattr(workpaper, "proposed_adjustments", None)
     if proposed is not None and not proposed.empty:
-        tables.append(("Proposed Tax Adjustments - Not Posted Unless Approved", proposed, False))
+        tables.append(("Draft Tax Adjustment Proposals — Review Required", proposed, False))
 
     if not tables:
         return
@@ -1132,19 +1158,37 @@ def _write_checks_sheet(wb: Workbook, reports, workpaper) -> None:
     if workpaper.bs_checks is not None and not workpaper.bs_checks.empty:
         row, _ = _write_simple_table(ws, workpaper.bs_checks, "Balance Sheet Test Checks", row + 3, 1)
 
-    tax_reconciliation_checks = getattr(workpaper, "tax_reconciliation_review_checks", None)
-    if tax_reconciliation_checks is not None and not tax_reconciliation_checks.empty:
-        row, _ = _write_simple_table(
-            ws,
-            tax_reconciliation_checks,
-            "Tax Reconciliation Review Checks",
-            row + 3,
-            1,
-        )
 
+def _write_review_items_sheet(wb: Workbook, workpaper) -> None:
+    """Consolidate accountant review findings outside the calculation bridge."""
+    blocks = []
     review_items = getattr(workpaper, "review_items", None)
     if review_items is not None and not review_items.empty:
-        _write_simple_table(ws, review_items, "Review Items", row + 3, 1)
+        blocks.append(review_items)
+
+    checks = getattr(workpaper, "tax_reconciliation_review_checks", None)
+    if checks is not None and not checks.empty:
+        checks = checks.rename(columns={
+            "Check": "Account", "Detail": "Review Note", "Status": "Draft Status",
+        }).assign(Source="Reconciliation", Section="Completeness checks")
+        blocks.append(checks)
+
+    if not blocks:
+        return
+
+    ws = wb.create_sheet("Review Items")
+    ws.sheet_view.showGridLines = False
+    ws.freeze_panes = "A3"
+    items = pd.concat(blocks, ignore_index=True)
+    last_row, last_col = _write_simple_table(ws, items, "Review Items", 1, 1)
+    ws.auto_filter.ref = f"A2:{get_column_letter(last_col)}{last_row}"
+    for col_idx, name in enumerate(items.columns, start=1):
+        if name in {"Review Note", "Reason", "Calculation Assumption", "Review Required"}:
+            ws.column_dimensions[get_column_letter(col_idx)].width = 60
+            for cells in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx):
+                cells[0].alignment = Alignment(vertical="top", wrap_text=True)
+        elif name in {"Source", "Draft Amount", "Draft Status", "Rule ID"}:
+            ws.column_dimensions[get_column_letter(col_idx)].width = 32
 
 
 def write_workbook(reports, workpaper) -> None:
@@ -1196,6 +1240,7 @@ def write_workbook(reports, workpaper) -> None:
 
     _write_inputs_sheet(wb, workpaper)
     _write_checks_sheet(wb, reports, workpaper)
+    _write_review_items_sheet(wb, workpaper)
 
     wb.calculation.fullCalcOnLoad = True
     wb.calculation.forceFullCalc = True

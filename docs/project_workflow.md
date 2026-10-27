@@ -43,6 +43,10 @@ It covers the client library, compact generator navigation and an auditable
 revision editor. A reviewer selects amendments; the application validates and
 exports a new revision without overwriting the original workbook.
 
+The reconciliation-safety and tool-integration audit, including its focused
+implementation plan and remaining MCP prerequisites, is recorded in
+[`reconciliation_and_tool_audit_20261027.md`](TODO/reconciliation_and_tool_audit_20261027.md).
+
 ## How to debug safely
 
 1. Identify the first failed stage; do not diagnose from the final workbook

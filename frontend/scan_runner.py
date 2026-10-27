@@ -15,8 +15,12 @@ from typing import Any, BinaryIO
 
 try:
     from .job_runner import ROOT_DIR, _as_list, _safe_filename
+    from .job_options import normalise_policy_year
 except ImportError:  # Streamlit imports this module from frontend/ directly.
     from job_runner import ROOT_DIR, _as_list, _safe_filename  # type: ignore
+    from job_options import normalise_policy_year  # type: ignore
+
+from tax_calculators.validation import CalculatorError
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent
@@ -53,6 +57,17 @@ def run_scan_job(
     uploaded_files: BinaryIO | list[BinaryIO] | None,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
+    try:
+        selected_income_year = normalise_policy_year(
+            profile.get("ato_policy_year", "2026")
+        )
+    except CalculatorError as exc:
+        return {
+            "status": "error",
+            "selected_income_year": str(profile.get("ato_policy_year", "")),
+            "error_message": str(exc),
+        }
+
     uploads = _as_list(uploaded_files)
     if not uploads:
         return {
@@ -80,6 +95,9 @@ def run_scan_job(
     env["TAX_JOB_WORK_DIR"] = str(scan_root)
     env["TAX_SCAN_RESULT_PATH"] = str(result_path)
     env["TAX_SCAN_SOURCE_HASHES"] = json.dumps(source_hashes)
+    env["SELECTED_INCOME_YEAR"] = selected_income_year
+    env["ATO_POLICY_YEAR"] = selected_income_year
+    env["ITR_POLICY_YEAR"] = selected_income_year
 
     completed = subprocess.run(
         [sys.executable, "-m", "backend.scan_workbooks"],
@@ -112,6 +130,7 @@ def run_scan_job(
             "input_dir": str(input_dir),
             "source_files": [str(path) for path in saved_paths],
             "profile": profile,
+            "selected_income_year": selected_income_year,
             "backend_log": f"{completed.stdout or ''}\n{completed.stderr or ''}".strip(),
         }
     )
